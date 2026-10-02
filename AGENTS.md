@@ -92,7 +92,7 @@ m = Markup("<b>hi</b>")
 - Day 7: English README showing the three incidents, then release v0.1.0 to PyPI with Trusted Publishing.
 
 ## Rules for agents
-- One small commit per change. Run `uv run pytest` before every commit. Never commit failing tests.
+- One small commit per change. Run `uv run pytest` before every commit. Never commit a change that makes a previously passing test fail. Acceptance tests for days not built yet are expected to fail; that is fine to commit.
 - Do not edit the acceptance tests to make them pass.
 - Do not add dependencies besides `griffe[pypi]` and `pytest` without asking.
 - If a task seems to need something outside v0.1 scope, stop and ask.
