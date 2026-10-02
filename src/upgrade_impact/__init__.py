@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from upgrade-impact!")
+"""Find dependency upgrade breakages in Python source code."""
