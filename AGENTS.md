@@ -85,9 +85,9 @@ m = Markup("<b>hi</b>")
 ## Build plan (week 1)
 - Day 1: skeleton, this file, the fixture, and a failing acceptance test file.
 - Day 2: `scan.py`, plus unit tests for import and alias mapping.
-- Day 3: existence check. The MarkupSafe and Jinja2 3.0.3 → 3.1.0 tests pass.
+- Day 3: existence check and a minimal CLI using the specified output format and exit codes. The MarkupSafe and Jinja2 3.0.3 → 3.1.0 tests pass.
 - Day 4: signature check. The urllib3 test passes.
-- Day 5: CLI, output format, exit codes, Windows UTF-8 fix.
+- Day 5: complete the CLI, including argument validation, help text, error handling, and Windows UTF-8 support.
 - Day 6: GitHub Actions CI running `uv run pytest` on ubuntu-latest and windows-latest.
 - Day 7: English README showing the three incidents, then release v0.1.0 to PyPI with Trusted Publishing.
 
