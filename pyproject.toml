@@ -1,0 +1,24 @@
+[project]
+name = "upgrade-impact"
+version = "0.1.0"
+description = "Find dependency upgrade breakages in your Python code."
+readme = "README.md"
+authors = [
+    { name = "gfr211306-crypto", email = "gfr211306@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "griffe[pypi]>=2.3.0",
+]
+
+[project.scripts]
+upgrade-impact = "upgrade_impact:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
