@@ -11,6 +11,10 @@ dependencies = [
     "griffe[pypi]>=2.3.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/gfr211306-crypto/upgrade-impact"
+Issues = "https://github.com/gfr211306-crypto/upgrade-impact/issues"
+
 [project.scripts]
 upgrade-impact = "upgrade_impact.cli:main"
 
