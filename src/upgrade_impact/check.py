@@ -218,7 +218,10 @@ def check(
         except Exception as error:
             # The loader wraps pip, archive extraction, and Python analysis;
             # all loader failures must become tool errors, not breakages.
-            raise CheckError(f"Could not load {distribution}=={version}: {error}") from error
+            hint = ""
+            if isinstance(error, ImportError) and import_name is None:
+                hint = f" (if {distribution} is imported under another name, pass --import-name)"
+            raise CheckError(f"Could not load {distribution}=={version}: {error}{hint}") from error
 
     old = load(old_version)
     new = load(new_version)

@@ -489,6 +489,23 @@ def fake_versions(
     return repo
 
 
+@pytest.mark.parametrize(
+    ("import_name", "hinted"), [(None, True), ("dateutil", False)]
+)
+def test_import_errors_suggest_import_name_only_when_it_was_defaulted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, import_name: str | None, hinted: bool
+) -> None:
+    repo = fake_versions(monkeypatch, tmp_path, ImportError("No module named 'python_dateutil'"))
+
+    with pytest.raises(CheckError) as error:
+        check("python-dateutil", "2.8.0", "2.9.0", repo, import_name=import_name)
+
+    assert str(error.value).startswith(
+        "Could not load python-dateutil==2.8.0: No module named 'python_dateutil'"
+    )
+    assert ("pass --import-name" in str(error.value)) is hinted
+
+
 def test_class_hierarchy_errors_during_comparison_are_check_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
