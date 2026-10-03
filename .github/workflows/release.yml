@@ -1,0 +1,56 @@
+name: Release
+
+# Publishes to PyPI with Trusted Publishing when a GitHub Release is published.
+# No API token is stored: PyPI trusts this workflow file, in this repository,
+# running in the "pypi" environment.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - name: Check that the release tag matches the package version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(uv version --short)"
+          if [ "${TAG#v}" != "$version" ]; then
+            echo "::error::Release tag $TAG does not match version $version in pyproject.toml"
+            exit 1
+          fi
+      - name: Test
+        run: uv run --locked pytest
+      - name: Build
+        run: uv build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/upgrade-impact/
+    permissions:
+      # Only this job can request the OIDC token that PyPI exchanges for an upload token.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
