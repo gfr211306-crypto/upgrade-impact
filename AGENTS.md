@@ -11,11 +11,13 @@ $ upgrade-impact urllib3 1.26.15 2.0.0 ./my-repo
 1 breaking · 0 to review
 ```
 
-## v0.1 scope (do not build more than this)
-- Python only, CLI only.
-- No GitHub Action, no LLM calls, no CVE scanning, no web UI. Write ideas in ROADMAP.md instead.
+## v0.2 scope (do not build more than this)
+- Python only, CLI and GitHub Action only.
+- The GitHub Action is now in scope. Still no LLM calls, no CVE scanning, no web UI.
+  Renovate support goes in ROADMAP.md.
 - Input: distribution name, old version, new version, repo path. Optional `--import-name`.
-- Output: one line per finding (`file:line  message`), then one summary line.
+- Output: one line per finding (`file:line  message`), then one summary line; `--format json`
+  produces one object with package, old, new, findings, summary, and error.
 - Exit code: 0 = no breaking findings, 1 = at least one ❌, 2 = tool error.
 - All user-facing text in English.
 
@@ -99,4 +101,52 @@ m = Markup("<b>hi</b>")
 - One small commit per change. Run `uv run pytest` before every commit. Never commit a change that makes a previously passing test fail. Acceptance tests for days not built yet are expected to fail; that is fine to commit.
 - Do not edit the acceptance tests to make them pass.
 - Do not add dependencies besides `griffe[pypi]` and `pytest` without asking.
-- If a task seems to need something outside v0.1 scope, stop and ask.
+- If a task seems to need something outside v0.2 scope, stop and ask.
+
+## v0.2: GitHub Action (Week 2)
+Goal: when Dependabot opens a PR that bumps Python packages, comment on the PR with the
+upgrade-impact result for each package.
+Scope change: the GitHub Action is now in scope. Still no LLM calls, no CVE scanning, no web UI.
+Renovate support goes in ROADMAP.md.
+
+### CLI changes (Day 8)
+- `--import-name` becomes optional. Auto-detect top-level import names from the downloaded
+  distribution (`*.dist-info/top_level.txt`, else RECORD). Test with python-dateutil → dateutil,
+  PyYAML → yaml, beautifulsoup4 → bs4.
+- If a distribution has several top-level names, analyze only the ones the repo imports.
+  If the repo imports none of them, report "not imported" with exit 0.
+- Add `--format json`: one object with package, old, new, findings (file, line, severity, message),
+  summary, error.
+- Security: set `PIP_ONLY_BINARY=:all:` when downloading, so installing a package never runs its
+  build code. A package with no wheel exits 2 with a clear message.
+
+### The Action (Day 9)
+- Composite `action.yml` at the repo root. Run the CLI from the action's own checkout
+  (`uvx --from` with the `github.action_path` expression), so the action version always equals
+  the CLI version.
+- Get packages and versions from `dependabot/fetch-metadata` (its `updated-dependencies-json`
+  output). Only the pip and uv ecosystems; skip others.
+- Also accept manual inputs `package`, `old-version`, `new-version` for testing. With no PR,
+  write the result to the job summary instead of commenting.
+- Post ONE comment per PR and update it on later runs. Find it by a hidden HTML comment marker
+  whose text is `upgrade-impact`.
+- Comment: a table (package | upgrade | result), then a collapsed details list where each
+  finding links to the exact line in the PR head commit.
+- Input `fail-on-breaking` (default true): fail the job if there is any breaking finding.
+- One package erroring must not stop the others. Show it as "could not analyze:" followed by
+  the reason.
+
+### Security rules
+- Trigger with `pull_request` only, never `pull_request_target`.
+- Permissions: `contents: read` and `pull-requests: write`, nothing else.
+- Only the comment step receives the token. The analysis step never sees it.
+- The README example runs only when the PR author
+  (`github.event.pull_request.user.login`) is `dependabot[bot]`.
+
+### Build plan (week 2)
+- Day 8: the CLI changes, with tests.
+- Day 9: `action.yml` and comment rendering, with unit tests that render from JSON fixtures.
+- Day 10: a self-test workflow in this repo using manual inputs (MarkupSafe 2.0.1 to 2.1.0 on
+  `tests/fixtures/demo`), plus a "GitHub Action" section in the README.
+- Day 11: Marketplace metadata (name, description, branding) and release v0.2.0.
+  A human publishes it to the Marketplace.
