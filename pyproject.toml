@@ -3,6 +3,8 @@ name = "upgrade-impact"
 version = "0.1.0"
 description = "Find dependency upgrade breakages in your Python code."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "gfr211306-crypto", email = "gfr211306@gmail.com" }
 ]
@@ -10,6 +12,10 @@ requires-python = ">=3.10"
 dependencies = [
     "griffe[pypi]>=2.3.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gfr211306-crypto/upgrade-impact"
+Issues = "https://github.com/gfr211306-crypto/upgrade-impact/issues"
 
 [project.scripts]
 upgrade-impact = "upgrade_impact.cli:main"
