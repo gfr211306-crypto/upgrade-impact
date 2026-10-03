@@ -1,11 +1,13 @@
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import griffe
-import platformdirs
 import pytest
 
-from upgrade_impact.check import CheckError, Finding, check, check_usages
+from upgrade_impact.check import CheckError, CheckResult, Finding, check, check_usages
 from upgrade_impact.scan import Usage
+from upgrade_impact.wheels import WheelError
 
 
 def module(name: str, *members: griffe.Object | griffe.Alias) -> griffe.Module:
@@ -178,14 +180,13 @@ def test_filters_unrelated_package_names() -> None:
     ("distribution", "override", "expected_import"),
     [("Foo-Bar", None, "foo_bar"), ("PyYAML", "yaml", "yaml")],
 )
-def test_check_loads_versions_after_creating_cache_and_scans_repo(
+def test_check_discovers_import_names_and_scans_repo(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     distribution: str,
     override: str | None,
     expected_import: str,
 ) -> None:
-    cache = tmp_path / "cache" / "griffe"
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "app.py").write_text(
@@ -196,26 +197,23 @@ def test_check_loads_versions_after_creating_cache_and_scans_repo(
     new = module(expected_import)
     calls = []
 
-    def fake_cache_dir(appname: str) -> str:
-        assert appname == "griffe"
-        return str(cache)
+    @contextmanager
+    def download(dist_name: str, version: str):
+        def load(import_name: str) -> griffe.Module:
+            calls.append((import_name, dist_name, version))
+            return {"1.2.3": old, "2.0.0": new}[version]
+        yield SimpleNamespace(names=(expected_import,), load=load, has_import=lambda name: True)
 
-    def fake_load_pypi(import_name: str, dist_name: str, version: str) -> griffe.Module:
-        assert cache.is_dir(), "The griffe cache must exist before loading either version"
-        calls.append((import_name, dist_name, version))
-        return {"==1.2.3": old, "==2.0.0": new}[version]
+    monkeypatch.setattr("upgrade_impact.check.download_distribution", download)
 
-    monkeypatch.setattr(platformdirs, "user_cache_dir", fake_cache_dir)
-    monkeypatch.setattr(griffe, "load_pypi", fake_load_pypi)
-
-    findings = check(distribution, "1.2.3", "2.0.0", repo, import_name=override)
+    result = check(distribution, "1.2.3", "2.0.0", repo, import_name=override)
 
     assert calls == [
-        (expected_import, distribution, "==1.2.3"),
-        (expected_import, distribution, "==2.0.0"),
+        (expected_import, distribution, "1.2.3"),
+        (expected_import, distribution, "2.0.0"),
     ]
     assert_removed(
-        findings,
+        result.findings,
         [usage(f"{expected_import}.removed"), usage(f"{expected_import}.removed", 2, "call")],
     )
 
@@ -476,34 +474,32 @@ def fake_versions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: Exception | None = None
 ) -> Path:
     """Serve two empty package versions, or raise ``error`` from the loader."""
-    monkeypatch.setattr(platformdirs, "user_cache_dir", lambda appname: str(tmp_path / "cache"))
-
-    def load_pypi(import_name: str, dist_name: str, version: str) -> griffe.Module:
+    @contextmanager
+    def download(dist_name: str, version: str):
         if error is not None:
             raise error
-        return module(import_name)
+        yield SimpleNamespace(names=("pkg",), load=module, has_import=lambda name: True)
 
-    monkeypatch.setattr(griffe, "load_pypi", load_pypi)
+    monkeypatch.setattr("upgrade_impact.check.download_distribution", download)
     repo = tmp_path / "repo"
     repo.mkdir()
+    (repo / "app.py").write_text("import pkg\n", encoding="utf-8")
     return repo
 
 
 @pytest.mark.parametrize(
-    ("import_name", "hinted"), [(None, True), ("dateutil", False)]
+    "import_name", [None, "dateutil"]
 )
-def test_import_errors_suggest_import_name_only_when_it_was_defaulted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, import_name: str | None, hinted: bool
+def test_wheel_download_errors_are_check_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, import_name: str | None
 ) -> None:
-    repo = fake_versions(monkeypatch, tmp_path, ImportError("No module named 'python_dateutil'"))
+    message = "Could not download python-dateutil==2.8.0: network unavailable"
+    repo = fake_versions(monkeypatch, tmp_path, WheelError(message))
 
     with pytest.raises(CheckError) as error:
         check("python-dateutil", "2.8.0", "2.9.0", repo, import_name=import_name)
 
-    assert str(error.value).startswith(
-        "Could not load python-dateutil==2.8.0: No module named 'python_dateutil'"
-    )
-    assert ("pass --import-name" in str(error.value)) is hinted
+    assert str(error.value) == message
 
 
 def test_class_hierarchy_errors_during_comparison_are_check_errors(
@@ -540,3 +536,97 @@ def test_inconsistent_class_hierarchies_do_not_crash_the_comparison() -> None:
     findings = check_usages(usages, version("1"), version("2"))
 
     assert [(finding.line, finding.severity) for finding in findings] == [(1, "review")]
+
+
+def wheel_versions(monkeypatch, tmp_path, old, new, *, names=None):
+    """Serve independently advertised metadata names and loadable module APIs."""
+    loaded = []
+
+    @contextmanager
+    def download(distribution, version):
+        modules = old if version == "1" else new
+
+        def load(name):
+            loaded.append((version, name))
+            return modules[name]
+
+        yield SimpleNamespace(
+            names=tuple(modules) if names is None else names,
+            load=load,
+            has_import=lambda name: name in modules,
+        )
+
+    monkeypatch.setattr("upgrade_impact.check.download_distribution", download)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    return repo, loaded
+
+
+def test_multi_root_distribution_loads_only_imported_names(tmp_path, monkeypatch):
+    old = {"used": module("used", function("removed")), "unused": module("unused")}
+    new = {"used": module("used"), "unused": module("unused")}
+    repo, loaded = wheel_versions(monkeypatch, tmp_path, old, new)
+    (repo / "app.py").write_text("from used import removed\nremoved()\n", encoding="utf-8")
+
+    result = check("multi-root", "1", "2", repo)
+
+    assert result.imported
+    assert loaded == [("1", "used"), ("2", "used")]
+    assert_removed(result.findings, [usage("used.removed"), usage("used.removed", 2, "call")])
+
+
+def test_not_imported_skips_loading_all_apis(tmp_path, monkeypatch):
+    repo, loaded = wheel_versions(monkeypatch, tmp_path, {"pkg": module("pkg")}, {})
+    (repo / "app.py").write_text("import unrelated\n", encoding="utf-8")
+
+    assert check("pkg", "1", "2", repo) == CheckResult([], imported=False)
+    assert loaded == []
+
+
+def test_removed_entire_top_level_name_reports_import_and_call(tmp_path, monkeypatch):
+    repo, loaded = wheel_versions(
+        monkeypatch, tmp_path, {"gone": module("gone", function("run"))}, {}
+    )
+    (repo / "app.py").write_text("import gone\ngone.run()\n", encoding="utf-8")
+
+    result = check("pkg", "1", "2", repo)
+
+    assert_removed(result.findings, [usage("gone"), usage("gone.run", 2, "call")])
+    assert loaded == [("1", "gone")]
+
+
+def test_new_only_import_has_no_old_api_to_compare(tmp_path, monkeypatch):
+    repo, loaded = wheel_versions(monkeypatch, tmp_path, {}, {"added": module("added")})
+    (repo / "app.py").write_text("import added\n", encoding="utf-8")
+
+    assert check("pkg", "1", "2", repo) == CheckResult([])
+    assert loaded == []
+
+
+@pytest.mark.parametrize("name", ["actual", "actual.sub"])
+def test_import_name_override_ignores_incomplete_metadata(tmp_path, monkeypatch, name):
+    def api():
+        root = module("actual", module("sub"))
+        return root.members["sub"] if name.endswith(".sub") else root
+
+    repo, loaded = wheel_versions(
+        monkeypatch, tmp_path, {name: api()}, {name: api()}, names=("advertised",)
+    )
+    (repo / "app.py").write_text(f"import {name}\n", encoding="utf-8")
+
+    assert check("pkg", "1", "2", repo, import_name=name) == CheckResult([])
+    assert loaded == [("1", name), ("2", name)]
+
+
+def test_highest_severity_wins_across_import_names_on_same_line(tmp_path, monkeypatch):
+    old = {
+        "a": module("a", function("run", param("mode", "1"))),
+        "b": module("b", function("run")),
+    }
+    new = {"a": module("a", function("run", param("mode", "2"))), "b": module("b")}
+    repo, _ = wheel_versions(monkeypatch, tmp_path, old, new)
+    (repo / "app.py").write_text("import a, b\na.run(); b.run()\n", encoding="utf-8")
+
+    result = check("multi-root", "1", "2", repo)
+
+    assert_removed(result.findings, [usage("b.run", 2, "call")])

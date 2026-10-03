@@ -1,4 +1,5 @@
 import io
+import json
 from pathlib import Path
 import sys
 from unittest.mock import Mock
@@ -6,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from upgrade_impact import cli
-from upgrade_impact.check import CheckError, Finding
+from upgrade_impact.check import CheckError, CheckResult, Finding
 
 
 @pytest.mark.parametrize("import_name", [None, "yaml"])
@@ -14,7 +15,7 @@ def test_forwards_arguments_and_reports_no_findings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
     import_name: str | None,
 ) -> None:
-    checker = Mock(return_value=[])
+    checker = Mock(return_value=CheckResult([]))
     monkeypatch.setattr(cli, "check", checker)
     arguments = ["PyYAML", "5.4.1", "6.0", str(tmp_path)]
     if import_name is not None:
@@ -38,10 +39,10 @@ def test_reports_breaking_findings_and_returns_one(
     monkeypatch.setattr(
         cli,
         "check",
-        Mock(return_value=[
+        Mock(return_value=CheckResult([
             Finding(Path("app.py"), 1, "markupsafe.soft_unicode", "soft_unicode was removed"),
             Finding(Path("app.py"), 9, "markupsafe.soft_unicode", "soft_unicode was removed"),
-        ]),
+        ])),
     )
 
     assert cli.main(["MarkupSafe", "2.0.1", "2.1.0", str(tmp_path)]) == 1
@@ -61,9 +62,9 @@ def test_review_findings_do_not_set_breaking_exit_code(
     monkeypatch.setattr(
         cli,
         "check",
-        Mock(return_value=[
+        Mock(return_value=CheckResult([
             Finding(Path("app.py"), 6, "urllib3.Retry", "review changed default", "review"),
-        ]),
+        ])),
     )
 
     assert cli.main(["urllib3", "1.26.15", "2.0.0", str(tmp_path)]) == 0
@@ -128,8 +129,9 @@ def test_help_explains_arguments_output_and_exit_codes(capsys: pytest.CaptureFix
         cli.main(["--help"])
 
     assert error.value.code == 0
-    out = capsys.readouterr().out
+    out = " ".join(capsys.readouterr().out.split())
     for text in ("distribution", "old_version", "new_version", "repo_path", "--import-name",
+                 "--format", "auto-detect", "wheel metadata",
                  "upgrade-impact urllib3 1.26.15 2.0.0", "exit codes", "tool error"):
         assert text in out
 
@@ -185,7 +187,7 @@ def test_accepts_valid_names_and_exact_versions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     distribution: str, old_version: str, new_version: str,
 ) -> None:
-    checker = Mock(return_value=[])
+    checker = Mock(return_value=CheckResult([]))
     monkeypatch.setattr(cli, "check", checker)
 
     assert cli.main([distribution, old_version, new_version, str(tmp_path)]) == 0
@@ -211,10 +213,10 @@ def test_output_is_utf8_on_a_legacy_windows_console(
     stderr = io.TextIOWrapper(io.BytesIO(), encoding="cp950", newline="\n")
     monkeypatch.setattr(sys, "stdout", stdout)
     monkeypatch.setattr(sys, "stderr", stderr)
-    monkeypatch.setattr(cli, "check", Mock(return_value=[
+    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult([
         Finding(Path("app.py"), 1, "pkg.f", "pkg.f was removed"),
         Finding(Path("app.py"), 2, "pkg.g", "review pkg.g", "review"),
-    ]))
+    ])))
 
     assert cli.main(["pkg", "1.0", "2.0", str(tmp_path)]) == 1
 
@@ -229,3 +231,180 @@ def test_output_is_utf8_on_a_legacy_windows_console(
     assert cli.main(["pkg", "1.0", "2.0", str(tmp_path)]) == 2
     stderr.flush()
     assert stderr.buffer.getvalue().decode("utf-8") == "error: cannot load 套件\n"
+
+
+@pytest.mark.parametrize(
+    ("findings", "exit_code", "breaking", "review"),
+    [
+        ([], 0, 0, 0),
+        ([Finding(Path("nested/app.py"), 9, "pkg.f", "pkg.f was removed")], 1, 1, 0),
+        ([Finding(Path("app.py"), 6, "pkg.f", "review changed default", "review")], 0, 0, 1),
+        ([
+            Finding(Path("app.py"), 9, "pkg.f", "pkg.f was removed"),
+            Finding(Path("app.py"), 6, "pkg.g", "review changed default", "review"),
+        ], 1, 1, 1),
+    ],
+)
+def test_json_findings_and_exit_codes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    findings: list[Finding], exit_code: int, breaking: int, review: int,
+) -> None:
+    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult(findings)))
+
+    assert cli.main(["pkg", "1.0", "2.0", str(tmp_path), "--format", "json"]) == exit_code
+
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {
+        "package": "pkg",
+        "old": "1.0",
+        "new": "2.0",
+        "findings": [
+            {"file": finding.file.as_posix(), "line": finding.line,
+             "severity": finding.severity, "message": finding.message}
+            for finding in findings
+        ],
+        "summary": {"breaking": breaking, "review": review, "status": "ok"},
+        "error": None,
+    }
+    assert captured.err == ""
+    assert len(captured.out.splitlines()) == 1
+    assert "❌" not in captured.out
+    assert "⚠" not in captured.out
+
+
+def test_abbreviated_format_option_selects_json_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult([])))
+
+    assert cli.main(["pkg", "1.0", "2.0", str(tmp_path), "--for", "json"]) == 0
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["package"] == "pkg"
+    assert payload["summary"] == {"breaking": 0, "review": 0, "status": "ok"}
+    assert payload["error"] is None
+    assert captured.err == ""
+
+
+@pytest.mark.parametrize("output_format", ["text", "json"])
+def test_unused_distribution_reports_not_imported_and_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    output_format: str,
+) -> None:
+    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult([], imported=False)))
+
+    assert cli.main(["pkg", "1.0", "2.0", str(tmp_path), "--format", output_format]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    if output_format == "text":
+        assert captured.out == "not imported\n0 breaking · 0 to review\n"
+    else:
+        payload = json.loads(captured.out)
+        assert payload["findings"] == []
+        assert payload["summary"] == {"breaking": 0, "review": 0, "status": "not imported"}
+        assert payload["error"] is None
+
+
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (CheckError("no wheel is available"), "no wheel is available"),
+        (OSError("cannot read repo"), "cannot read repo"),
+        (KeyError("boom"), "unexpected KeyError: 'boom'"),
+    ],
+)
+def test_json_tool_errors_produce_one_object_without_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    error: Exception, message: str,
+) -> None:
+    monkeypatch.setattr(cli, "check", Mock(side_effect=error))
+
+    assert cli.main(["pkg", "1.0", "2.0", str(tmp_path), "--format=json"]) == 2
+
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {
+        "package": "pkg", "old": "1.0", "new": "2.0", "findings": [],
+        "summary": {"breaking": 0, "review": 0, "status": "error"}, "error": message,
+    }
+    assert captured.err == ""
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error_part", "package", "old", "new"),
+    [
+        (["--format", "json"], "required", None, None, None),
+        (["pkg", "1.0", "--format=json"], "required", "pkg", "1.0", None),
+        (["pkg", "1.0", "2.0", ".", "--format=json", "--unknown"],
+         "unrecognized arguments", "pkg", "1.0", "2.0"),
+        (["pkg", "1.0", "2.0", ".", "--format=json", "--import-name"],
+         "expected one argument", "pkg", "1.0", "2.0"),
+    ],
+)
+def test_json_argument_parser_errors_use_the_same_schema(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    arguments: list[str], error_part: str,
+    package: str | None, old: str | None, new: str | None,
+) -> None:
+    checker = Mock()
+    monkeypatch.setattr(cli, "check", checker)
+
+    assert cli.main(arguments) == 2
+
+    checker.assert_not_called()
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert set(payload) == {"package", "old", "new", "findings", "summary", "error"}
+    assert (payload["package"], payload["old"], payload["new"]) == (package, old, new)
+    assert payload["findings"] == []
+    assert payload["summary"] == {"breaking": 0, "review": 0, "status": "error"}
+    assert error_part in payload["error"]
+    assert captured.err == ""
+
+
+def test_json_validation_errors_before_checking_packages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    checker = Mock()
+    monkeypatch.setattr(cli, "check", checker)
+
+    assert cli.main(["bad name", "1.0", "2.0", str(tmp_path), "--format", "json"]) == 2
+
+    checker.assert_not_called()
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["package"] == "bad name"
+    assert payload["error"] == "invalid distribution name: 'bad name'"
+    assert payload["summary"]["status"] == "error"
+    assert captured.err == ""
+
+
+def test_json_utf8_paths_messages_and_errors_on_legacy_console(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp950", newline="\n")
+    stderr = io.TextIOWrapper(io.BytesIO(), encoding="cp950", newline="\n")
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult([
+        Finding(Path("套件/使用.py"), 3, "pkg.f", "pkg.f removed: café"),
+    ])))
+    arguments = ["pkg", "1.0", "2.0", str(tmp_path), "--format", "json"]
+
+    assert cli.main(arguments) == 1
+
+    stdout.flush()
+    payload = json.loads(stdout.buffer.getvalue().decode("utf-8"))
+    assert payload["findings"][0]["file"] == "套件/使用.py"
+    assert payload["findings"][0]["message"] == "pkg.f removed: café"
+
+    stdout.seek(0)
+    stdout.truncate(0)
+    monkeypatch.setattr(cli, "check", Mock(side_effect=CheckError("cannot load 套件")))
+    assert cli.main(arguments) == 2
+    stdout.flush()
+    payload = json.loads(stdout.buffer.getvalue().decode("utf-8"))
+    assert payload["error"] == "cannot load 套件"
+    stderr.flush()
+    assert stderr.buffer.getvalue() == b""
