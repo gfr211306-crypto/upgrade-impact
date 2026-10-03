@@ -222,4 +222,11 @@ def check(
 
     old = load(old_version)
     new = load(new_version)
-    return check_usages(usages, old, new)
+    try:
+        return check_usages(usages, old, new)
+    except ValueError as error:
+        # griffe raises ValueError for class hierarchies it cannot linearize,
+        # such as an inconsistent MRO or an inheritance cycle.
+        raise CheckError(
+            f"Could not compare {distribution} {old_version} and {new_version}: {error}"
+        ) from error

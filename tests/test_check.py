@@ -470,3 +470,56 @@ def test_moved_parameter_needs_review_only_when_passed_by_position(
     findings = check_usages([call("pkg.fetch", *keywords, positional=positional)], old, new)
 
     assert [finding.message for finding in findings] == expected
+
+
+def fake_versions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: Exception | None = None
+) -> Path:
+    """Serve two empty package versions, or raise ``error`` from the loader."""
+    monkeypatch.setattr(platformdirs, "user_cache_dir", lambda appname: str(tmp_path / "cache"))
+
+    def load_pypi(import_name: str, dist_name: str, version: str) -> griffe.Module:
+        if error is not None:
+            raise error
+        return module(import_name)
+
+    monkeypatch.setattr(griffe, "load_pypi", load_pypi)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    return repo
+
+
+def test_class_hierarchy_errors_during_comparison_are_check_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = fake_versions(monkeypatch, tmp_path)
+
+    def fail(*args: object) -> None:
+        raise ValueError("Cannot compute C3 linearization")
+
+    monkeypatch.setattr("upgrade_impact.check.check_usages", fail)
+
+    with pytest.raises(CheckError, match=(
+        r"^Could not compare pkg 1\.0 and 2\.0: Cannot compute C3 linearization$"
+    )):
+        check("pkg", "1.0", "2.0", repo)
+
+
+def test_inconsistent_class_hierarchies_do_not_crash_the_comparison() -> None:
+    def version(default: str) -> griffe.Module:
+        result = module("pkg")
+        base = klass("Base", function("__init__", param("self"), param("mode", default)))
+        result.set_member("Base", base)
+        result.set_member("Child", klass("Child", bases=(griffe.ExprName("Base", parent=result),)))
+        # Base(Child) and Child(Base) form an inheritance cycle: no MRO exists.
+        base.bases.append(griffe.ExprName("Child", parent=result))
+        result.set_member("Mixed", klass("Mixed", bases=(
+            griffe.ExprName("Base", parent=result), griffe.ExprName("Child", parent=result),
+        )))
+        return result
+
+    usages = [call("pkg.Base"), call("pkg.Child", line=2), call("pkg.Mixed", line=3)]
+
+    findings = check_usages(usages, version("1"), version("2"))
+
+    assert [(finding.line, finding.severity) for finding in findings] == [(1, "review")]
