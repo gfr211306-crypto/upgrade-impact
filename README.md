@@ -145,3 +145,7 @@ $ uv run pytest
 ```
 
 The tests download real packages from PyPI.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
