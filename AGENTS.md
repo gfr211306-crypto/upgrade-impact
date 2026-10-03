@@ -53,6 +53,10 @@ $ upgrade-impact urllib3 1.26.15 2.0.0 ./my-repo
    For a call, resolve aliases with `obj.final_target.path`. For classes, also check `<path>.__init__`.
    - `PARAMETER_REMOVED` and the call passes that keyword → ❌
    - `PARAMETER_CHANGED_DEFAULT` and the call does not pass that argument → ⚠️
+   - `PARAMETER_MOVED` and the call passes that argument by position → ⚠️
+     (a call that passes it by keyword, or not at all, is unaffected)
+   - `CLASS_REMOVED_BASE` where the only removed base is `object` → ignore
+     (`class X(object)` → `class X` changes nothing in Python 3)
    - Any other breakage on an object the code calls → ⚠️
    - Ignore `ATTRIBUTE_CHANGED_VALUE`. It is mostly noise, such as `__version__`.
 5. One finding per line. The highest severity wins.
