@@ -451,3 +451,22 @@ def test_removing_only_the_object_base_is_ignored(
 
     assert [finding.message for finding in findings] == expected
 
+
+@pytest.mark.parametrize(
+    ("keywords", "positional", "expected"),
+    [
+        ((), 2, ["pkg.fetch(...) may break: positional parameter was moved (`timeout`)"]),
+        ((), 1, []),
+        (("timeout",), 1, []),
+    ],
+    ids=["passed-by-position", "not-passed", "passed-by-keyword"],
+)
+def test_moved_parameter_needs_review_only_when_passed_by_position(
+    keywords: tuple[str, ...], positional: int, expected: list[str]
+) -> None:
+    old = module("pkg", function("fetch", param("url"), param("timeout", "1"), param("retries", "0")))
+    new = module("pkg", function("fetch", param("url"), param("retries", "0"), param("timeout", "1")))
+
+    findings = check_usages([call("pkg.fetch", *keywords, positional=positional)], old, new)
+
+    assert [finding.message for finding in findings] == expected

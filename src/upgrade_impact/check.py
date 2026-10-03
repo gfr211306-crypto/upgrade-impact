@@ -108,6 +108,8 @@ def _judge(
             f"{call} relies on the default of `{name}`,"
             f" which changed from `{old_default}` to `{new_default}`"
         )
+    if breakage.kind is griffe.BreakageKind.PARAMETER_MOVED and not by_position:
+        return None
     if breakage.kind is griffe.BreakageKind.CLASS_REMOVED_BASE:
         kept = {str(base) for base in breakage.new_value}
         removed = {str(base) for base in breakage.old_value} - kept
