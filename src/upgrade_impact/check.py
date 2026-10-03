@@ -108,6 +108,12 @@ def _judge(
             f"{call} relies on the default of `{name}`,"
             f" which changed from `{old_default}` to `{new_default}`"
         )
+    if breakage.kind is griffe.BreakageKind.CLASS_REMOVED_BASE:
+        kept = {str(base) for base in breakage.new_value}
+        removed = {str(base) for base in breakage.old_value} - kept
+        # Dropping an explicit ``object`` base changes nothing in Python 3.
+        if removed <= {"object"}:
+            return None
     detail = f" (`{name}`)" if name else ""
     return "review", f"{call} may break: {breakage.kind.value.lower()}{detail}"
 

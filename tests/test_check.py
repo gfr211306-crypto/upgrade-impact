@@ -327,7 +327,7 @@ def test_signature_breakages_are_reported_before_class_breakages() -> None:
         klass(
             "Retry",
             function("__init__", param("self"), param("mode", "1")),
-            bases=(griffe.ExprName("object"),),
+            bases=(griffe.ExprName("Base"),),
         ),
     )
     new = module("pkg", klass("Retry", function("__init__", param("self"), param("mode", "2"))))
@@ -430,3 +430,24 @@ def test_api_comparison_alias_errors_are_check_errors() -> None:
 
     with pytest.raises(CheckError, match="Could not compare the pkg APIs"):
         check_usages([call("pkg.fetch")], old, new)
+
+
+@pytest.mark.parametrize(
+    ("old_bases", "new_bases", "expected"),
+    [
+        (("object",), (), []),
+        (("Base", "object"), ("Base",), []),
+        (("Base", "Mixin"), ("Base",), ["pkg.Retry(...) may break: base class was removed"]),
+    ],
+    ids=["only-object", "object-and-kept-base", "real-base"],
+)
+def test_removing_only_the_object_base_is_ignored(
+    old_bases: tuple[str, ...], new_bases: tuple[str, ...], expected: list[str]
+) -> None:
+    def version(bases: tuple[str, ...]) -> griffe.Module:
+        return module("pkg", klass("Retry", bases=tuple(griffe.ExprName(base) for base in bases)))
+
+    findings = check_usages([call("pkg.Retry")], version(old_bases), version(new_bases))
+
+    assert [finding.message for finding in findings] == expected
+
