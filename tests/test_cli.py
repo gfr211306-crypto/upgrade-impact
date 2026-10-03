@@ -207,8 +207,8 @@ def test_unexpected_errors_exit_two_instead_of_crashing(
 def test_output_is_utf8_on_a_legacy_windows_console(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp950")
-    stderr = io.TextIOWrapper(io.BytesIO(), encoding="cp950")
+    stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp950", newline="\n")
+    stderr = io.TextIOWrapper(io.BytesIO(), encoding="cp950", newline="\n")
     monkeypatch.setattr(sys, "stdout", stdout)
     monkeypatch.setattr(sys, "stderr", stderr)
     monkeypatch.setattr(cli, "check", Mock(return_value=[
