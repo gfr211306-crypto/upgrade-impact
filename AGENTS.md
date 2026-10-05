@@ -25,7 +25,12 @@ $ upgrade-impact urllib3 1.26.15 2.0.0 ./my-repo
 - `src/upgrade_impact/scan.py`: find usages in the user's repo
 - `src/upgrade_impact/check.py`: compare versions and judge each usage
 - `src/upgrade_impact/cli.py`: argument parsing, output, exit codes (entry point `upgrade-impact`)
+- `action.yml`: the composite GitHub Action
+- `src/upgrade_impact/action.py`: the Action's analysis step, which never receives the token
+- `src/upgrade_impact/comment.py`: render JSON reports as the pull request comment
 - `tests/fixtures/demo/app.py`: acceptance fixture (below)
+- `tests/fixtures/reports/*.json`, `tests/fixtures/comments/*.md`: CLI reports and the comments
+  rendered from them
 
 ## Commands
 - Setup: `uv sync`
