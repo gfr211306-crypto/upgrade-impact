@@ -1,0 +1,101 @@
+name: upgrade-impact
+description: >-
+  Comment on Dependabot pull requests with the lines of your Python code that
+  each package upgrade breaks.
+
+inputs:
+  updated-dependencies-json:
+    description: >-
+      The updated-dependencies-json output of dependabot/fetch-metadata. Only
+      pip and uv updates are checked.
+    required: false
+    default: ""
+  package:
+    description: >-
+      A distribution to check without Dependabot, such as MarkupSafe. Set
+      old-version and new-version too.
+    required: false
+    default: ""
+  old-version:
+    description: The exact version used now, for a check without Dependabot.
+    required: false
+    default: ""
+  new-version:
+    description: The exact version to upgrade to, for a check without Dependabot.
+    required: false
+    default: ""
+  path:
+    description: The directory to scan, relative to the workspace.
+    required: false
+    default: "."
+  fail-on-breaking:
+    description: Fail the job if any upgrade breaks a line of code.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # Security: only the "Comment on the pull request" step receives the
+    # GitHub token. The other steps install uv and analyze packages downloaded
+    # from PyPI, so they get empty token variables and never see it.
+    - name: Set up uv
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      env:
+        GITHUB_TOKEN: ""
+        GH_TOKEN: ""
+      with:
+        # A version whose checksum setup-uv verifies.
+        version: "0.12.17"
+        enable-cache: "false"
+        github-token: ""
+
+    - name: Check the upgrades
+      id: analyze
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        INPUT_UPDATED_DEPENDENCIES_JSON: ${{ inputs.updated-dependencies-json }}
+        INPUT_PACKAGE: ${{ inputs.package }}
+        INPUT_OLD_VERSION: ${{ inputs.old-version }}
+        INPUT_NEW_VERSION: ${{ inputs.new-version }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON_BREAKING: ${{ inputs.fail-on-breaking }}
+        GITHUB_TOKEN: ""
+        GH_TOKEN: ""
+      # The CLI runs from this action's own checkout, so both versions match.
+      run: uvx --from "$ACTION_PATH" python -m upgrade_impact.action
+
+    - name: Comment on the pull request
+      if: github.event_name == 'pull_request' && steps.analyze.outputs.comment-file != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        COMMENT_FILE: ${{ steps.analyze.outputs.comment-file }}
+      run: |
+        # Update this action's earlier comment, found by its hidden marker.
+        comments="repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments"
+        ids="$(gh api --paginate "$comments" --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- upgrade-impact -->"))) | .id')"
+        if [ -n "$ids" ]; then
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/${ids%%$'\n'*}" -F "body=@$COMMENT_FILE" --silent
+        else
+          gh api --method POST "$comments" -F "body=@$COMMENT_FILE" --silent
+        fi
+
+    - name: Write the job summary
+      if: github.event_name != 'pull_request' && steps.analyze.outputs.comment-file != ''
+      shell: bash
+      env:
+        COMMENT_FILE: ${{ steps.analyze.outputs.comment-file }}
+      run: cat "$COMMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Fail on breaking findings
+      if: steps.analyze.outputs.fail == 'true'
+      shell: bash
+      env:
+        BREAKING: ${{ steps.analyze.outputs.breaking }}
+      run: |
+        echo "::error::upgrade-impact found $BREAKING breaking finding(s)."
+        exit 1
