@@ -49,7 +49,7 @@ def test_only_the_comment_step_receives_the_token() -> None:
     assert TEXT.count("github.token") == 1
     assert "secrets." not in TEXT
     # No input can hand a different token to the action.
-    inputs = TEXT.split("\ninputs:\n", 1)[1].split("\nruns:\n", 1)[0]
+    inputs = TEXT.split("\ninputs:\n", 1)[1].split("\noutputs:\n", 1)[0]
     assert not re.findall(r"^  [\w-]*token[\w-]*:", inputs, re.M)
 
 
@@ -96,15 +96,21 @@ def test_comment_step_updates_the_comment_marked_by_the_renderer() -> None:
     assert "--method POST" in comment_script
 
 
-def test_analysis_runs_the_cli_from_the_actions_own_checkout() -> None:
+def test_analysis_runs_the_locked_cli_from_the_actions_own_checkout() -> None:
     step = steps()[ANALYSIS]
 
     assert "        ACTION_PATH: ${{ github.action_path }}\n" in step
-    assert script(step) == 'uvx --from "$ACTION_PATH" python -m upgrade_impact.action'
+    assert "        UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/upgrade-impact-venv\n" in step
+    # Locked dependency versions, and no uv settings from outside the action.
+    assert script(step) == (
+        'uv run --no-config --project "$ACTION_PATH" --locked --no-dev'
+        " python -m upgrade_impact.action"
+    )
 
 
 def test_every_input_reaches_the_analysis_step() -> None:
-    inputs = re.findall(r"^  ([\w-]+):$", TEXT.split("\nruns:\n", 1)[0], re.M)
+    section = TEXT.split("\ninputs:\n", 1)[1].split("\noutputs:\n", 1)[0]
+    inputs = re.findall(r"^  ([\w-]+):$", section, re.M)
     step = steps()[ANALYSIS]
 
     assert inputs == [

@@ -33,6 +33,14 @@ inputs:
     required: false
     default: "true"
 
+outputs:
+  breaking:
+    description: The number of breaking findings.
+    value: ${{ steps.analyze.outputs.breaking }}
+  comment-file:
+    description: The file with the rendered comment, or empty if there was nothing to check.
+    value: ${{ steps.analyze.outputs.comment-file }}
+
 runs:
   using: composite
   steps:
@@ -55,6 +63,8 @@ runs:
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
+        # The action's own environment, outside the workspace.
+        UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/upgrade-impact-venv
         HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         INPUT_UPDATED_DEPENDENCIES_JSON: ${{ inputs.updated-dependencies-json }}
         INPUT_PACKAGE: ${{ inputs.package }}
@@ -64,8 +74,11 @@ runs:
         INPUT_FAIL_ON_BREAKING: ${{ inputs.fail-on-breaking }}
         GITHUB_TOKEN: ""
         GH_TOKEN: ""
-      # The CLI runs from this action's own checkout, so both versions match.
-      run: uvx --from "$ACTION_PATH" python -m upgrade_impact.action
+      # The CLI runs from this action's own checkout, so both versions match,
+      # with the dependency versions pinned in its uv.lock. --no-config ignores
+      # every uv.toml and pyproject.toml setting outside the action, such as
+      # the ones in the repository being checked.
+      run: uv run --no-config --project "$ACTION_PATH" --locked --no-dev python -m upgrade_impact.action
 
     - name: Comment on the pull request
       if: github.event_name == 'pull_request' && steps.analyze.outputs.comment-file != ''
