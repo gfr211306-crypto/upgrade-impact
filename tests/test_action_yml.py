@@ -121,3 +121,13 @@ def test_every_input_reaches_the_analysis_step() -> None:
         variable = "INPUT_" + name.upper().replace("-", "_")
         assert f"        {variable}: ${{{{ inputs.{name} }}}}\n" in step
         assert f'"{variable}"' in ACTION_SOURCE
+
+
+def test_has_the_metadata_the_marketplace_requires() -> None:
+    header = TEXT.split("\ninputs:\n", 1)[0]
+    description = re.search(r"^description: >-\n((?:  .+\n)+)", header, re.M).group(1)
+
+    assert re.search(r"^name: upgrade-impact$", header, re.M)
+    # The Marketplace shows at most 125 characters of the description.
+    assert len(" ".join(description.split())) <= 125
+    assert re.search(r"^branding:\n  icon: alert-triangle\n  color: orange$", header, re.M)

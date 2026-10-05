@@ -2,6 +2,10 @@ name: upgrade-impact
 description: >-
   Comment on Dependabot pull requests with the lines of your Python code that
   each package upgrade breaks.
+author: gfr211306-crypto
+branding:
+  icon: alert-triangle
+  color: orange
 
 inputs:
   updated-dependencies-json:
