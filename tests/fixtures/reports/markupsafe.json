@@ -1,0 +1,25 @@
+{
+  "package": "MarkupSafe",
+  "old": "2.0.1",
+  "new": "2.1.0",
+  "findings": [
+    {
+      "file": "app.py",
+      "line": 1,
+      "severity": "breaking",
+      "message": "markupsafe.soft_unicode was removed"
+    },
+    {
+      "file": "app.py",
+      "line": 9,
+      "severity": "breaking",
+      "message": "markupsafe.soft_unicode was removed"
+    }
+  ],
+  "summary": {
+    "breaking": 2,
+    "review": 0,
+    "status": "ok"
+  },
+  "error": null
+}
