@@ -1,6 +1,7 @@
 import io
 import json
 from pathlib import Path
+import subprocess
 import sys
 from unittest.mock import Mock
 
@@ -408,3 +409,14 @@ def test_json_utf8_paths_messages_and_errors_on_legacy_console(
     assert payload["error"] == "cannot load 套件"
     stderr.flush()
     assert stderr.buffer.getvalue() == b""
+
+
+def test_python_dash_m_runs_the_cli(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "upgrade_impact", "--format", "json", "--", "pkg", "1.0", "1.0",
+         str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8", timeout=60, check=False,
+    )
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert json.loads(result.stdout)["error"] == "old and new versions are both 1.0"

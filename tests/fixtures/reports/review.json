@@ -1,0 +1,19 @@
+{
+  "package": "urllib3",
+  "old": "1.26.15",
+  "new": "2.0.0",
+  "findings": [
+    {
+      "file": "client.py",
+      "line": 3,
+      "severity": "review",
+      "message": "urllib3.util.retry.Retry(...) relies on the default of `allowed_methods`, which changed from `_Default` to `DEFAULT_ALLOWED_METHODS`"
+    }
+  ],
+  "summary": {
+    "breaking": 0,
+    "review": 1,
+    "status": "ok"
+  },
+  "error": null
+}

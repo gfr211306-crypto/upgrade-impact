@@ -140,6 +140,72 @@ $ upgrade-impact Jinja2 3.1.0 3.1.4 tests/fixtures/demo
 0 breaking · 0 to review
 ```
 
+## GitHub Action
+
+When Dependabot opens a pull request that bumps Python packages, the action checks each pip or uv
+update and comments on the pull request: a table with one row per package, then a collapsed list
+in which each finding links to its line in the pull request's head commit. Later runs update the
+same comment.
+
+Add `.github/workflows/upgrade-impact.yml`:
+
+```yaml
+name: upgrade-impact
+
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  upgrade-impact:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - id: metadata
+        uses: dependabot/fetch-metadata@v3
+      - uses: gfr211306-crypto/upgrade-impact@v0.2.0
+        with:
+          updated-dependencies-json: ${{ steps.metadata.outputs.updated-dependencies-json }}
+```
+
+The workflow has two steps: [dependabot/fetch-metadata](https://github.com/dependabot/fetch-metadata)
+reads which packages Dependabot updated, and upgrade-impact checks them. Updates in other
+ecosystems are skipped. By default, the job fails if any upgrade breaks a line of code; it fails
+after the comment is posted.
+
+| Input | Default | Description |
+|---|---|---|
+| `updated-dependencies-json` | | The `updated-dependencies-json` output of dependabot/fetch-metadata. |
+| `package`, `old-version`, `new-version` | | Check one upgrade without Dependabot, for example to try the action. |
+| `path` | `.` | The directory to scan, relative to the workspace. |
+| `fail-on-breaking` | `true` | Fail the job if any upgrade breaks a line of code. |
+
+Outputs: `breaking`, the number of breaking findings, and `comment-file`, the rendered comment.
+Without a pull request, such as in a `workflow_dispatch` run with the manual inputs, the result is
+written to the job summary instead of a comment. A package that cannot be analyzed shows
+`could not analyze:` and the reason, and the other packages are still checked.
+
+### Security
+
+- **Trigger:** use `pull_request`, never `pull_request_target`; the action refuses to run on
+  `pull_request_target`.
+- **Permissions:** grant only `contents: read` and `pull-requests: write`.
+- **Dependabot only:** the `if:` condition runs the job only on pull requests opened by
+  `dependabot[bot]`.
+- **Token:** only the action's comment step receives the token. The steps that install uv and
+  analyze packages downloaded from PyPI never see it. dependabot/fetch-metadata needs the token to
+  read the pull request's commits, so it runs as its own step in the workflow, not inside the
+  action.
+- **Checkout credentials:** `persist-credentials: false` keeps the token out of `.git/config`,
+  where the analysis could otherwise read it.
+- **Pinned dependencies:** the action runs with the dependency versions pinned in its `uv.lock`,
+  and ignores uv settings in the repository being checked.
+
 ## How it works
 
 1. **Download both versions' wheels** from PyPI with `PIP_ONLY_BINARY=:all:`. Source distributions
