@@ -1,11 +1,12 @@
 """Command-line interface: argument validation, output, and exit codes."""
 
 import argparse
+import json
 from pathlib import Path
 import re
 import sys
 
-from upgrade_impact.check import CheckError, check
+from upgrade_impact.check import CheckError, Finding, check
 
 
 EXIT_OK = 0
@@ -33,8 +34,24 @@ exit codes:
 """
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+class _JSONArgumentError(ValueError):
+    """An argument error that can be reported using the JSON schema."""
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *, json_errors: bool = False, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self.json_errors = json_errors
+
+    def error(self, message: str) -> None:
+        if self.json_errors:
+            raise _JSONArgumentError(message)
+        super().error(message)
+
+
+def _parser(*, json_errors: bool = False) -> argparse.ArgumentParser:
+    parser = _ArgumentParser(
+        json_errors=json_errors,
         prog="upgrade-impact",
         description=(
             "Find the lines in your Python code that break when you upgrade one dependency.\n"
@@ -51,10 +68,15 @@ def _parser() -> argparse.ArgumentParser:
         "--import-name",
         metavar="NAME",
         help=(
-            "module name used in import statements, when it differs from the distribution name "
-            "(default: the distribution name lowercased, with - replaced by _; "
-            "example: --import-name yaml for PyYAML)"
+            "override import name; by default, auto-detect names from wheel metadata "
+            "and analyze the ones imported by the repository"
         ),
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="output format (default: text); json writes one result object, including errors",
     )
     return parser
 
@@ -79,6 +101,54 @@ def _validate(args: argparse.Namespace) -> str | None:
     return None
 
 
+def _json_requested(argv: list[str]) -> bool:
+    """Recognize JSON output even when argparse cannot parse all arguments."""
+    output_format = "text"
+    for index, argument in enumerate(argv):
+        if argument.startswith("--format="):
+            output_format = argument.split("=", 1)[1]
+        elif argument == "--format" and index + 1 < len(argv):
+            output_format = argv[index + 1]
+    return output_format == "json"
+
+
+def _print_json(
+    args: argparse.Namespace,
+    findings: list[Finding],
+    *,
+    status: str,
+    error: str | None = None,
+) -> None:
+    print(json.dumps({
+        "package": getattr(args, "distribution", None),
+        "old": getattr(args, "old_version", None),
+        "new": getattr(args, "new_version", None),
+        "findings": [
+            {
+                "file": finding.file.as_posix(),
+                "line": finding.line,
+                "severity": finding.severity,
+                "message": finding.message,
+            }
+            for finding in findings
+        ],
+        "summary": {
+            "breaking": sum(finding.severity == "breaking" for finding in findings),
+            "review": sum(finding.severity == "review" for finding in findings),
+            "status": status,
+        },
+        "error": error,
+    }, ensure_ascii=False))
+
+
+def _report_error(args: argparse.Namespace, message: str, *, json_output: bool) -> int:
+    if json_output:
+        _print_json(args, [], status="error", error=message)
+    else:
+        print(f"error: {message}", file=sys.stderr)
+    return EXIT_ERROR
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print findings and return the documented process exit code."""
     # Emoji and non-ASCII paths must not crash a cp950 or cp1252 console,
@@ -87,14 +157,20 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
 
-    args = _parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    json_output = _json_requested(arguments)
+    args = argparse.Namespace()
+    try:
+        args = _parser(json_errors=json_output).parse_args(arguments, namespace=args)
+    except _JSONArgumentError as error:
+        return _report_error(args, str(error), json_output=True)
+    json_output = args.format == "json"
     problem = _validate(args)
     if problem is not None:
-        print(f"error: {problem}", file=sys.stderr)
-        return EXIT_ERROR
+        return _report_error(args, problem, json_output=json_output)
 
     try:
-        findings = check(
+        result = check(
             args.distribution,
             args.old_version,
             args.new_version,
@@ -102,22 +178,23 @@ def main(argv: list[str] | None = None) -> int:
             import_name=args.import_name,
         )
     except (CheckError, OSError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return EXIT_ERROR
+        return _report_error(args, str(error), json_output=json_output)
     except Exception as error:
         # An uncaught exception would exit with 1, which means "breaking".
-        print(f"error: unexpected {type(error).__name__}: {error}", file=sys.stderr)
-        return EXIT_ERROR
+        return _report_error(
+            args, f"unexpected {type(error).__name__}: {error}", json_output=json_output,
+        )
 
-    breaking = 0
-    review = 0
-    for finding in findings:
-        if finding.severity == "breaking":
-            breaking += 1
-            icon = "❌"
-        else:
-            review += 1
-            icon = "⚠️"
-        print(f"{icon} {finding.file.as_posix()}:{finding.line}  {finding.message}")
-    print(f"{breaking} breaking · {review} to review")
+    findings = result.findings
+    breaking = sum(finding.severity == "breaking" for finding in findings)
+    review = sum(finding.severity == "review" for finding in findings)
+    if json_output:
+        _print_json(args, findings, status="ok" if result.imported else "not imported")
+    else:
+        if not result.imported:
+            print("not imported")
+        for finding in findings:
+            icon = "❌" if finding.severity == "breaking" else "⚠️"
+            print(f"{icon} {finding.file.as_posix()}:{finding.line}  {finding.message}")
+        print(f"{breaking} breaking · {review} to review")
     return EXIT_BREAKING if breaking else EXIT_OK

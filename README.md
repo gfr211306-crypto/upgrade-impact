@@ -23,15 +23,19 @@ or `uv tool install upgrade-impact`, or `pip install upgrade-impact`. Requires P
 ## Usage
 
 ```console
-$ upgrade-impact DISTRIBUTION OLD_VERSION NEW_VERSION REPO_PATH [--import-name NAME]
+$ upgrade-impact DISTRIBUTION OLD_VERSION NEW_VERSION REPO_PATH [--import-name NAME] [--format text|json]
 ```
 
 - `DISTRIBUTION`: the name on PyPI, such as `urllib3` or `PyYAML`.
 - `OLD_VERSION`, `NEW_VERSION`: exact versions, such as `1.26.15`, not ranges such as `>=2.0`.
 - `REPO_PATH`: the directory to scan.
-- `--import-name`: the module name you import, when it differs from the distribution name.
-  The default is the distribution name lowercased, with `-` replaced by `_`.
-  Example: `upgrade-impact PyYAML 5.4.1 6.0 . --import-name yaml`.
+- Import names are detected from the downloaded wheel's `top_level.txt`, or its `RECORD` when
+  that metadata is absent. For example, `python-dateutil` → `dateutil`, `PyYAML` → `yaml`, and
+  `beautifulsoup4` → `bs4` work without an override.
+- A distribution can provide several import names. Only those imported by your repository
+  are analyzed. If none are imported, the tool prints `not imported` and exits 0.
+- `--import-name`: optionally override detection with a specific import name.
+- `--format`: `text` (default) or `json` for scripts and CI.
 
 ### Output
 
@@ -39,6 +43,31 @@ One line per finding, then a summary line:
 
 - `❌ file:line  message`: the upgrade breaks this line.
 - `⚠️ file:line  message`: the API this line uses changed; review it.
+
+With `--format json`, stdout contains one JSON object, including when analysis fails:
+
+```console
+$ upgrade-impact MarkupSafe 2.0.1 2.1.0 tests/fixtures/demo --format json
+```
+
+```json
+{
+  "package": "MarkupSafe",
+  "old": "2.0.1",
+  "new": "2.1.0",
+  "findings": [
+    {"file": "app.py", "line": 1, "severity": "breaking", "message": "markupsafe.soft_unicode was removed"},
+    {"file": "app.py", "line": 9, "severity": "breaking", "message": "markupsafe.soft_unicode was removed"}
+  ],
+  "summary": {"breaking": 2, "review": 0, "status": "ok"},
+  "error": null
+}
+```
+
+Finding severity is `breaking` or `review`. Summary status is `ok` when analysis completed,
+`not imported` when the repository uses none of the distribution's imports, or `error` on a tool
+error. On an error, `error` contains the reason and `findings` is empty. Exit codes are the same
+for both formats.
 
 ### Exit codes
 
@@ -113,8 +142,10 @@ $ upgrade-impact Jinja2 3.1.0 3.1.4 tests/fixtures/demo
 
 ## How it works
 
-1. **Load both versions** from PyPI with [griffe](https://mkdocstrings.github.io/griffe/),
-   which reads the API from source without importing it.
+1. **Download both versions' wheels** from PyPI with `PIP_ONLY_BINARY=:all:`. Source distributions
+   are rejected, so package build code never runs. [griffe](https://mkdocstrings.github.io/griffe/)
+   reads the extracted Python sources with dynamic inspection disabled. Since analysis is static,
+   a historical wheel can be read even if it targets another Python version or platform.
 2. **Scan your repository** with Python's `ast` module. Imports such as `import a.b as c` and
    `from a.b import x as y` are mapped to full dotted paths, so aliased calls are found too.
    `.venv`, `venv`, `.git`, `node_modules`, `build`, `dist` and `site-packages` are skipped.
@@ -135,7 +166,9 @@ Each line gets one finding, with the most severe winning.
   followed.
 - Only the package's own API is compared. Behavior changes that keep the same signature are not
   detected.
-- Both versions must be installable with `pip` from PyPI on your machine.
+- Both versions must have wheels on PyPI. Source-only releases exit 2 with a clear error.
+- Compiled modules without Python source or stubs cannot be inspected safely and produce a
+  tool error when selected for analysis.
 
 ## Development
 

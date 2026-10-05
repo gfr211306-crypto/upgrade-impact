@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Literal
 
 import griffe
-import platformdirs
 
 from upgrade_impact.scan import Usage, scan
+from upgrade_impact.wheels import WheelError, download_distribution
 
 
 class CheckError(RuntimeError):
@@ -24,6 +24,14 @@ class Finding:
     path: str
     message: str
     severity: Literal["breaking", "review"] = "breaking"
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """Findings and whether the repository imports this distribution."""
+
+    findings: list[Finding]
+    imported: bool = True
 
 
 _ALIAS_ERRORS = (griffe.AliasResolutionError, griffe.CyclicAliasError)
@@ -164,20 +172,21 @@ def _check_call(
 
 
 def check_usages(
-    usages: Iterable[Usage], old: griffe.Module, new: griffe.Module
+    usages: Iterable[Usage], old: griffe.Module, new: griffe.Module | None
 ) -> list[Finding]:
     """Report removals and call signature changes, one finding per source line.
 
     Paths missing in the old version, or blocked by unresolved intermediate
     aliases in either version, cannot establish a breakage and are skipped.
     On each line the first breaking finding wins, then the first to review.
+    ``new=None`` means the old top-level import was removed entirely.
     """
     findings: dict[tuple[Path, int], Finding] = {}
     breakages: _Breakages | None = None
     for usage in usages:
         try:
             old_obj = _member(old, usage.path)
-            new_obj = _member(new, usage.path)
+            new_obj = _member(new, usage.path) if new is not None else None
         except _ALIAS_ERRORS:
             continue
         if old_obj is None:
@@ -206,27 +215,37 @@ def check(
     new_version: str,
     repo_path: str | Path,
     import_name: str | None = None,
-) -> list[Finding]:
-    """Load two exact PyPI versions and check imports and calls in a repository."""
-    package = import_name if import_name is not None else distribution.lower().replace("-", "_")
-    usages = scan(repo_path, package)
-    Path(platformdirs.user_cache_dir("griffe")).mkdir(parents=True, exist_ok=True)
-
-    def load(version: str) -> griffe.Module:
-        try:
-            return griffe.load_pypi(package, distribution, f"=={version}")
-        except Exception as error:
-            # The loader wraps pip, archive extraction, and Python analysis;
-            # all loader failures must become tool errors, not breakages.
-            hint = ""
-            if isinstance(error, ImportError) and import_name is None:
-                hint = f" (if {distribution} is imported under another name, pass --import-name)"
-            raise CheckError(f"Could not load {distribution}=={version}: {error}{hint}") from error
-
-    old = load(old_version)
-    new = load(new_version)
+) -> CheckResult:
+    """Compare wheel APIs for the distribution's imports used by the repository."""
     try:
-        return check_usages(usages, old, new)
+        with download_distribution(distribution, old_version) as old_wheel, \
+                download_distribution(distribution, new_version) as new_wheel:
+            names = [import_name] if import_name is not None else sorted(
+                set(old_wheel.names) | set(new_wheel.names)
+            )
+            selected = [(name, scan(repo_path, name)) for name in names]
+            selected = [(name, usages) for name, usages in selected if usages]
+            if not selected:
+                return CheckResult([], imported=False)
+
+            findings: dict[tuple[Path, int], Finding] = {}
+            for name, usages in selected:
+                root = name.split(".")[0]
+                if import_name is None and root not in old_wheel.names:
+                    # A newly introduced import has no old API to compare.
+                    continue
+                old = old_wheel.load(name)
+                new = new_wheel.load(name) if new_wheel.has_import(name) else None
+                for finding in check_usages(usages, old, new):
+                    key = (finding.file, finding.line)
+                    current = findings.get(key)
+                    if current is None or (current.severity, finding.severity) == ("review", "breaking"):
+                        findings[key] = finding
+            return CheckResult(sorted(
+                findings.values(), key=lambda finding: (finding.file.as_posix(), finding.line)
+            ))
+    except WheelError as error:
+        raise CheckError(str(error)) from error
     except ValueError as error:
         # griffe raises ValueError for class hierarchies it cannot linearize,
         # such as an inconsistent MRO or an inheritance cycle.
