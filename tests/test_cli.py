@@ -16,7 +16,7 @@ def test_forwards_arguments_and_reports_no_findings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
     import_name: str | None,
 ) -> None:
-    checker = Mock(return_value=CheckResult([]))
+    checker = Mock(return_value=CheckResult([], usages=2, files=1))
     monkeypatch.setattr(cli, "check", checker)
     arguments = ["PyYAML", "5.4.1", "6.0", str(tmp_path)]
     if import_name is not None:
@@ -43,7 +43,7 @@ def test_reports_breaking_findings_and_returns_one(
         Mock(return_value=CheckResult([
             Finding(Path("app.py"), 1, "markupsafe.soft_unicode", "soft_unicode was removed"),
             Finding(Path("app.py"), 9, "markupsafe.soft_unicode", "soft_unicode was removed"),
-        ])),
+        ], usages=2, files=1)),
     )
 
     assert cli.main(["MarkupSafe", "2.0.1", "2.1.0", str(tmp_path)]) == 1
@@ -65,7 +65,7 @@ def test_review_findings_do_not_set_breaking_exit_code(
         "check",
         Mock(return_value=CheckResult([
             Finding(Path("app.py"), 6, "urllib3.Retry", "review changed default", "review"),
-        ])),
+        ], usages=2, files=1)),
     )
 
     assert cli.main(["urllib3", "1.26.15", "2.0.0", str(tmp_path)]) == 0
@@ -250,7 +250,7 @@ def test_json_findings_and_exit_codes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
     findings: list[Finding], exit_code: int, breaking: int, review: int,
 ) -> None:
-    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult(findings)))
+    monkeypatch.setattr(cli, "check", Mock(return_value=CheckResult(findings, usages=5, files=2)))
 
     assert cli.main(["pkg", "1.0", "2.0", str(tmp_path), "--format", "json"]) == exit_code
 
@@ -264,7 +264,9 @@ def test_json_findings_and_exit_codes(
              "severity": finding.severity, "message": finding.message}
             for finding in findings
         ],
-        "summary": {"breaking": breaking, "review": review, "status": "ok"},
+        "summary": {
+            "breaking": breaking, "review": review, "status": "ok", "usages": 5, "files": 2,
+        },
         "error": None,
     }
     assert captured.err == ""
@@ -283,7 +285,9 @@ def test_abbreviated_format_option_selects_json_output(
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["package"] == "pkg"
-    assert payload["summary"] == {"breaking": 0, "review": 0, "status": "ok"}
+    assert payload["summary"] == {
+        "breaking": 0, "review": 0, "status": "ok", "usages": 0, "files": 0,
+    }
     assert payload["error"] is None
     assert captured.err == ""
 
@@ -304,7 +308,9 @@ def test_unused_distribution_reports_not_imported_and_exits_zero(
     else:
         payload = json.loads(captured.out)
         assert payload["findings"] == []
-        assert payload["summary"] == {"breaking": 0, "review": 0, "status": "not imported"}
+        assert payload["summary"] == {
+            "breaking": 0, "review": 0, "status": "not imported", "usages": 0, "files": 0,
+        }
         assert payload["error"] is None
 
 
@@ -327,7 +333,9 @@ def test_json_tool_errors_produce_one_object_without_stderr(
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {
         "package": "pkg", "old": "1.0", "new": "2.0", "findings": [],
-        "summary": {"breaking": 0, "review": 0, "status": "error"}, "error": message,
+        "summary": {
+            "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+        }, "error": message,
     }
     assert captured.err == ""
 
@@ -359,7 +367,9 @@ def test_json_argument_parser_errors_use_the_same_schema(
     assert set(payload) == {"package", "old", "new", "findings", "summary", "error"}
     assert (payload["package"], payload["old"], payload["new"]) == (package, old, new)
     assert payload["findings"] == []
-    assert payload["summary"] == {"breaking": 0, "review": 0, "status": "error"}
+    assert payload["summary"] == {
+        "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+    }
     assert error_part in payload["error"]
     assert captured.err == ""
 
@@ -377,7 +387,9 @@ def test_json_validation_errors_before_checking_packages(
     payload = json.loads(captured.out)
     assert payload["package"] == "bad name"
     assert payload["error"] == "invalid distribution name: 'bad name'"
-    assert payload["summary"]["status"] == "error"
+    assert payload["summary"] == {
+        "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+    }
     assert captured.err == ""
 
 

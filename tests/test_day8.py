@@ -30,7 +30,7 @@ def test_detects_real_distribution_import_name(tmp_path, distribution, old, new,
         "old": old,
         "new": new,
         "findings": [],
-        "summary": {"breaking": 0, "review": 0, "status": "ok"},
+        "summary": {"breaking": 0, "review": 0, "status": "ok", "usages": 1, "files": 1},
         "error": None,
     }
 
@@ -47,7 +47,9 @@ def test_real_breaking_incident_has_json_findings():
     report = json.loads(result.stdout)
     assert {item["line"] for item in report["findings"]} == {1, 9}
     assert all(item["severity"] == "breaking" for item in report["findings"])
-    assert report["summary"] == {"breaking": 2, "review": 0, "status": "ok"}
+    assert report["summary"] == {
+        "breaking": 2, "review": 0, "status": "ok", "usages": 2, "files": 1,
+    }
     assert report["error"] is None
 
 
@@ -61,7 +63,9 @@ def test_unused_real_distribution_reports_not_imported(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stderr == ""
     report = json.loads(result.stdout)
-    assert report["summary"] == {"breaking": 0, "review": 0, "status": "not imported"}
+    assert report["summary"] == {
+        "breaking": 0, "review": 0, "status": "not imported", "usages": 0, "files": 0,
+    }
     assert report["findings"] == []
     assert report["error"] is None
 
@@ -76,5 +80,7 @@ def test_real_source_only_release_returns_json_tool_error(tmp_path):
     assert result.stderr == ""
     report = json.loads(result.stdout)
     assert report["summary"]["status"] == "error"
+    assert report["summary"]["usages"] is None
+    assert report["summary"]["files"] is None
     assert report["error"].startswith("No wheel is available for functools32==3.2.3-2;")
     assert "build code" in report["error"]

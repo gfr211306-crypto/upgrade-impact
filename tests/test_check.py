@@ -599,7 +599,7 @@ def test_new_only_import_has_no_old_api_to_compare(tmp_path, monkeypatch):
     repo, loaded = wheel_versions(monkeypatch, tmp_path, {}, {"added": module("added")})
     (repo / "app.py").write_text("import added\n", encoding="utf-8")
 
-    assert check("pkg", "1", "2", repo) == CheckResult([])
+    assert check("pkg", "1", "2", repo) == CheckResult([], usages=1, files=1)
     assert loaded == []
 
 
@@ -614,7 +614,7 @@ def test_import_name_override_ignores_incomplete_metadata(tmp_path, monkeypatch,
     )
     (repo / "app.py").write_text(f"import {name}\n", encoding="utf-8")
 
-    assert check("pkg", "1", "2", repo, import_name=name) == CheckResult([])
+    assert check("pkg", "1", "2", repo, import_name=name) == CheckResult([], usages=1, files=1)
     assert loaded == [("1", name), ("2", name)]
 
 

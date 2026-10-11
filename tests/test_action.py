@@ -125,7 +125,9 @@ def test_check_needs_both_versions_before_running_the_cli(monkeypatch: pytest.Mo
         "old": "",
         "new": "3.1.4",
         "findings": [],
-        "summary": {"breaking": 0, "review": 0, "status": "error"},
+        "summary": {
+            "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+        },
         "error": "the update has no old version",
     }
 
@@ -154,8 +156,80 @@ def test_check_turns_any_failure_into_an_error_report(
     result = check(Upgrade("urllib3", "1.26.15", "2.0.0"), ".")
 
     assert result["summary"]["status"] == "error"
+    assert result["summary"]["usages"] is None
+    assert result["summary"]["files"] is None
     assert result["error"] == reason
     assert (result["package"], result["old"], result["new"]) == ("urllib3", "1.26.15", "2.0.0")
+
+
+@pytest.mark.parametrize("name", ["markupsafe", "jinja2", "dateutil", "functools32"])
+def test_check_accepts_usage_counts_for_every_report_status(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    expected = report(name)
+    monkeypatch.setattr(subprocess, "run", Mock(return_value=subprocess.CompletedProcess(
+        [], 0, stdout=json.dumps(expected), stderr="",
+    )))
+
+    result = check(Upgrade(expected["package"], expected["old"], expected["new"]), ".")
+
+    assert result == expected
+
+
+@pytest.mark.parametrize("status", ["ok", "not imported", "error"])
+@pytest.mark.parametrize("missing", ["usages", "files"])
+def test_check_rejects_reports_without_both_usage_counts(
+    monkeypatch: pytest.MonkeyPatch, status: str, missing: str
+) -> None:
+    invalid = report("jinja2")
+    invalid["summary"].update(status=status, usages=None if status == "error" else 0,
+                              files=None if status == "error" else 0)
+    del invalid["summary"][missing]
+    monkeypatch.setattr(subprocess, "run", Mock(return_value=subprocess.CompletedProcess(
+        [], 0, stdout=json.dumps(invalid), stderr="",
+    )))
+
+    result = check(Upgrade("Jinja2", "3.1.0", "3.1.4"), ".")
+
+    assert result["summary"] == {
+        "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+    }
+    assert "without a report" in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("status", "usages", "files"),
+    [
+        ("ok", True, 1),
+        ("ok", 1, False),
+        ("ok", -1, 1),
+        ("ok", 1, -1),
+        ("ok", 1.5, 1),
+        ("ok", 1, "1"),
+        ("ok", None, 1),
+        ("ok", 1, None),
+        ("not imported", 1, 0),
+        ("not imported", 0, 1),
+        ("not imported", None, None),
+        ("error", 0, None),
+        ("error", None, 0),
+    ],
+)
+def test_check_rejects_invalid_usage_counts(
+    monkeypatch: pytest.MonkeyPatch, status: str, usages: Any, files: Any
+) -> None:
+    invalid = report("jinja2")
+    invalid["summary"].update(status=status, usages=usages, files=files)
+    monkeypatch.setattr(subprocess, "run", Mock(return_value=subprocess.CompletedProcess(
+        [], 0, stdout=json.dumps(invalid), stderr="",
+    )))
+
+    result = check(Upgrade("Jinja2", "3.1.0", "3.1.4"), ".")
+
+    assert result["summary"] == {
+        "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+    }
+    assert "without a report" in result["error"]
 
 
 def test_writes_one_comment_for_all_dependabot_updates(

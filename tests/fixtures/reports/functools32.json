@@ -6,7 +6,9 @@
   "summary": {
     "breaking": 0,
     "review": 0,
-    "status": "error"
+    "status": "error",
+    "usages": null,
+    "files": null
   },
   "error": "No wheel is available for functools32==3.2.3-2; source distributions are disabled to avoid running build code"
 }

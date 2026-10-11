@@ -6,7 +6,9 @@
   "summary": {
     "breaking": 0,
     "review": 0,
-    "status": "ok"
+    "status": "ok",
+    "usages": 3,
+    "files": 1
   },
   "error": null
 }

@@ -28,10 +28,12 @@ class Finding:
 
 @dataclass(frozen=True)
 class CheckResult:
-    """Findings and whether the repository imports this distribution."""
+    """Findings and coverage of this distribution's repository usages."""
 
     findings: list[Finding]
     imported: bool = True
+    usages: int = 0
+    files: int = 0
 
 
 _ALIAS_ERRORS = (griffe.AliasResolutionError, griffe.CyclicAliasError)
@@ -228,6 +230,11 @@ def check(
             if not selected:
                 return CheckResult([], imported=False)
 
+            locations = {
+                (usage.file, usage.line)
+                for _, usages in selected
+                for usage in usages
+            }
             findings: dict[tuple[Path, int], Finding] = {}
             for name, usages in selected:
                 root = name.split(".")[0]
@@ -241,9 +248,13 @@ def check(
                     current = findings.get(key)
                     if current is None or (current.severity, finding.severity) == ("review", "breaking"):
                         findings[key] = finding
-            return CheckResult(sorted(
-                findings.values(), key=lambda finding: (finding.file.as_posix(), finding.line)
-            ))
+            return CheckResult(
+                sorted(
+                    findings.values(), key=lambda finding: (finding.file.as_posix(), finding.line)
+                ),
+                usages=len(locations),
+                files=len({file for file, _ in locations}),
+            )
     except WheelError as error:
         raise CheckError(str(error)) from error
     except ValueError as error:

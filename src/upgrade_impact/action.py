@@ -89,9 +89,23 @@ def _error_report(upgrade: Upgrade, reason: str) -> dict[str, Any]:
         "old": upgrade.old,
         "new": upgrade.new,
         "findings": [],
-        "summary": {"breaking": 0, "review": 0, "status": "error"},
+        "summary": {
+            "breaking": 0, "review": 0, "status": "error", "usages": None, "files": None,
+        },
         "error": reason,
     }
+
+
+def _has_usage_counts(summary: Mapping[str, Any]) -> bool:
+    """Require counts for successful reports and nulls when analysis failed."""
+    names = ("usages", "files")
+    if not all(name in summary for name in names):
+        return False
+    if summary.get("status") == "error":
+        return all(summary[name] is None for name in names)
+    if not all(type(summary[name]) is int and summary[name] >= 0 for name in names):
+        return False
+    return summary.get("status") != "not imported" or all(summary[name] == 0 for name in names)
 
 
 def _is_report(report: object) -> bool:
@@ -113,6 +127,7 @@ def _is_report(report: object) -> bool:
         and type(summary.get("breaking")) is int
         and type(summary.get("review")) is int
         and summary.get("status") in _STATUSES
+        and _has_usage_counts(summary)
         and (error is None or isinstance(error, str))
     )
 

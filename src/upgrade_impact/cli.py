@@ -117,6 +117,8 @@ def _print_json(
     findings: list[Finding],
     *,
     status: str,
+    usages: int | None = None,
+    files: int | None = None,
     error: str | None = None,
 ) -> None:
     print(json.dumps({
@@ -136,6 +138,8 @@ def _print_json(
             "breaking": sum(finding.severity == "breaking" for finding in findings),
             "review": sum(finding.severity == "review" for finding in findings),
             "status": status,
+            "usages": usages,
+            "files": files,
         },
         "error": error,
     }, ensure_ascii=False))
@@ -189,7 +193,10 @@ def main(argv: list[str] | None = None) -> int:
     breaking = sum(finding.severity == "breaking" for finding in findings)
     review = sum(finding.severity == "review" for finding in findings)
     if json_output:
-        _print_json(args, findings, status="ok" if result.imported else "not imported")
+        _print_json(
+            args, findings, status="ok" if result.imported else "not imported",
+            usages=result.usages, files=result.files,
+        )
     else:
         if not result.imported:
             print("not imported")

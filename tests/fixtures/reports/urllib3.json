@@ -19,7 +19,9 @@
   "summary": {
     "breaking": 2,
     "review": 0,
-    "status": "ok"
+    "status": "ok",
+    "usages": 4,
+    "files": 1
   },
   "error": null
 }

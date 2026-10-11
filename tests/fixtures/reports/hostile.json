@@ -20,7 +20,9 @@
     "summary": {
       "breaking": 1,
       "review": 1,
-      "status": "ok"
+      "status": "ok",
+      "usages": 4,
+      "files": 2
     },
     "error": null
   },
@@ -32,7 +34,9 @@
     "summary": {
       "breaking": 0,
       "review": 0,
-      "status": "error"
+      "status": "error",
+      "usages": null,
+      "files": null
     },
     "error": "Could not download wheel for broken==1.0: ERROR: No matching distribution | see [docs](https://evil.example)\n@octocat <script>alert(1)</script> #1\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   }
