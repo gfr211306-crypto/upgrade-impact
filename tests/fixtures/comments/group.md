@@ -3,9 +3,9 @@
 
 | Package | Upgrade | Result |
 | --- | --- | --- |
-| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking |
-| `urllib3` | `1.26.15` → `2.0.0` | ❌ 2 breaking |
-| `Jinja2` | `3.1.0` → `3.1.4` | ✅ no findings |
+| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking · 2 usages in 1 file |
+| `urllib3` | `1.26.15` → `2.0.0` | ❌ 2 breaking · 4 usages in 1 file |
+| `Jinja2` | `3.1.0` → `3.1.4` | ✅ no findings · 3 usages in 1 file |
 | `python-dateutil` | `2.8.2` → `2.9.0.post0` | not imported |
 | `functools32` | `3.2.3-2` → `3.2.3-1` | could not analyze\: No wheel is available for functools32\=\=3\.2\.3\-2\; source distributions are disabled to avoid running build code |
 

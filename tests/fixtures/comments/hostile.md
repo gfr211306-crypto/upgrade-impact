@@ -3,7 +3,7 @@
 
 | Package | Upgrade | Result |
 | --- | --- | --- |
-| `evil\|pkg <b>bold</b>` | `1.0` → `` 2.0` `` | ❌ 1 breaking · 1 to review |
+| `evil\|pkg <b>bold</b>` | `1.0` → `` 2.0` `` | ❌ 1 breaking · 1 to review · 4 usages in 2 files |
 | `broken` | `1.0` → `2.0` | could not analyze\: Could not download wheel for broken\=\=1\.0\: ERROR\: No matching distribution \| see \[docs\]\(https\:\/\/evil\.example\) \@​octocat \<script\>alert\(1\)\<\/script\> \#​1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx… |
 
 <details>

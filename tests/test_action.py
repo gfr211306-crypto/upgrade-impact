@@ -258,8 +258,8 @@ def test_writes_one_comment_for_all_dependabot_updates(
     assert f"]({BLOB_URL}/app.py#L6)" in body
     assert "could not analyze\\: the update has no old version" in body
     assert capsys.readouterr().out.splitlines() == [
-        "upgrade-impact: urllib3 1.26.15 → 2.0.0: ❌ 2 breaking",
-        "upgrade-impact: MarkupSafe 2.0.1 → 2.1.0: ❌ 2 breaking",
+        "upgrade-impact: urllib3 1.26.15 → 2.0.0: ❌ 2 breaking · 4 usages in 1 file",
+        "upgrade-impact: MarkupSafe 2.0.1 → 2.1.0: ❌ 2 breaking · 2 usages in 1 file",
         "upgrade-impact: Jinja2 → 3.1.4: could not analyze: the update has no old version",
     ]
 
@@ -287,7 +287,7 @@ def test_one_failing_package_does_not_stop_the_others(
     assert rows == [
         "| `urllib3` | `1.26.15` → `2.0.0` | could not analyze\\: upgrade\\-impact exited with "
         "code \\-11 without a report\\: Segmentation fault |",
-        "| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking |",
+        "| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking · 2 usages in 1 file |",
         "| `Jinja2` | `?` → `3.1.4` | could not analyze\\: the update has no old version |",
     ]
 
@@ -428,3 +428,20 @@ def test_manual_inputs_check_a_real_upgrade(
     ]
     body = (tmp_path / "upgrade-impact" / "comment.md").read_text(encoding="utf-8")
     assert body == render([report("markupsafe")], blob_url=BLOB_URL, root="tests/fixtures/demo")
+    assert "| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking · 2 usages in 1 file |" in body
+
+
+def test_manual_no_findings_report_includes_counts_for_the_job_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(action, "check", fake_check({"Jinja2": report("jinja2")}))
+
+    code, outputs = run_action(
+        tmp_path, monkeypatch, GITHUB_EVENT_NAME="workflow_dispatch", INPUT_PACKAGE="Jinja2",
+        INPUT_OLD_VERSION="3.1.0", INPUT_NEW_VERSION="3.1.4",
+    )
+
+    assert (code, outputs["breaking"], outputs["fail"]) == (0, "0", "false")
+    body = Path(outputs["comment-file"]).read_text(encoding="utf-8")
+    assert body == render([report("jinja2")], blob_url=BLOB_URL, root="")
+    assert "| `Jinja2` | `3.1.0` → `3.1.4` | ✅ no findings · 3 usages in 1 file |" in body

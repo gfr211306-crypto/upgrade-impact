@@ -3,7 +3,7 @@
 
 | Package | Upgrade | Result |
 | --- | --- | --- |
-| `urllib3` | `1.26.15` → `2.0.0` | ⚠️ 1 to review |
+| `urllib3` | `1.26.15` → `2.0.0` | ⚠️ 1 to review · 2 usages in 1 file |
 
 <details>
 <summary>1 finding</summary>

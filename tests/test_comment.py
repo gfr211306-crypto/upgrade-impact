@@ -109,6 +109,7 @@ def test_omits_the_details_when_there_are_no_findings() -> None:
     body = render([report("jinja2"), report("dateutil")])
 
     assert "<details>" not in body
+    assert "| `Jinja2` | `3.1.0` → `3.1.4` | ✅ no findings · 3 usages in 1 file |" in body
     assert body.endswith("| `python-dateutil` | `2.8.2` → `2.9.0.post0` | not imported |\n")
 
 
@@ -131,9 +132,9 @@ def test_long_comments_stay_under_githubs_limit() -> None:
 @pytest.mark.parametrize(
     ("name", "summary"),
     [
-        ("markupsafe", "❌ 2 breaking"),
-        ("review", "⚠️ 1 to review"),
-        ("jinja2", "✅ no findings"),
+        ("markupsafe", "❌ 2 breaking · 2 usages in 1 file"),
+        ("review", "⚠️ 1 to review · 2 usages in 1 file"),
+        ("jinja2", "✅ no findings · 3 usages in 1 file"),
         ("dateutil", "not imported"),
         (
             "functools32",
@@ -150,4 +151,36 @@ def test_describes_breaking_and_review_counts_together() -> None:
     data = report("markupsafe")
     data["summary"]["review"] = 3
 
-    assert describe(data) == "❌ 2 breaking · 3 to review"
+    assert describe(data) == "❌ 2 breaking · 3 to review · 2 usages in 1 file"
+
+
+@pytest.mark.parametrize(
+    ("usages", "files", "counts"),
+    [
+        (0, 0, "0 usages in 0 files"),
+        (1, 1, "1 usage in 1 file"),
+        (2, 1, "2 usages in 1 file"),
+        (2, 2, "2 usages in 2 files"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("name", "result"),
+    [
+        ("jinja2", "✅ no findings"),
+        ("markupsafe", "❌ 2 breaking"),
+        ("review", "⚠️ 1 to review"),
+        ("hostile", "❌ 1 breaking · 1 to review"),
+    ],
+)
+def test_renders_usage_counts_with_correct_singular_and_plural_forms(
+    name: str, result: str, usages: int, files: int, counts: str
+) -> None:
+    data = report(name)
+    if name == "hostile":
+        data = data[0]
+    data["summary"].update(usages=usages, files=files)
+
+    assert describe(data) == f"{result} · {counts}"
+    body = render([data])
+    row = next(line for line in body.splitlines() if line.startswith("| `"))
+    assert row.endswith(f"| {result} · {counts} |")

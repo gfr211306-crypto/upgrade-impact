@@ -83,10 +83,13 @@ def describe(report: Report) -> str:
         return "not imported"
     breaking, review = summary["breaking"], summary["review"]
     if breaking:
-        return f"❌ {breaking} breaking" + (f" · {review} to review" if review else "")
-    if review:
-        return f"⚠️ {review} to review"
-    return "✅ no findings"
+        result = f"❌ {breaking} breaking" + (f" · {review} to review" if review else "")
+    elif review:
+        result = f"⚠️ {review} to review"
+    else:
+        result = "✅ no findings"
+    counts = f"{_plural(summary['usages'], 'usage')} in {_plural(summary['files'], 'file')}"
+    return f"{result} · {counts}"
 
 
 def _repository_path(root: str | None, file: str) -> str | None:
