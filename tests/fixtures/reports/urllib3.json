@@ -1,0 +1,25 @@
+{
+  "package": "urllib3",
+  "old": "1.26.15",
+  "new": "2.0.0",
+  "findings": [
+    {
+      "file": "app.py",
+      "line": 6,
+      "severity": "breaking",
+      "message": "urllib3.util.retry.Retry(...) uses removed parameter `method_whitelist=`"
+    },
+    {
+      "file": "app.py",
+      "line": 7,
+      "severity": "breaking",
+      "message": "urllib3.Retry(...) uses removed parameter `method_whitelist=`"
+    }
+  ],
+  "summary": {
+    "breaking": 2,
+    "review": 0,
+    "status": "ok"
+  },
+  "error": null
+}

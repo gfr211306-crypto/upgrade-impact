@@ -1,0 +1,57 @@
+name: Self-test
+
+# Runs this repository's action on the demo fixture and checks the result.
+# Security: only pull_request triggers it, never pull_request_target.
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  action:
+    name: Run the action on tests/fixtures/demo
+    # A fork's token cannot comment, so only run on branches of this repository.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # Keep the token out of .git/config, where the analysis step could read it.
+          persist-credentials: false
+
+      - name: Check MarkupSafe 2.0.1 to 2.1.0
+        id: report
+        uses: ./
+        with:
+          package: MarkupSafe
+          old-version: 2.0.1
+          new-version: 2.1.0
+          path: tests/fixtures/demo
+          fail-on-breaking: false
+
+      - name: Check the comment
+        env:
+          BREAKING: ${{ steps.report.outputs.breaking }}
+          COMMENT_FILE: ${{ steps.report.outputs.comment-file }}
+        run: |
+          test "$BREAKING" = 2
+          grep -F '| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking |' "$COMMENT_FILE"
+          grep -F "/tests/fixtures/demo/app.py#L9)" "$COMMENT_FILE"
+
+      # The second run updates the same comment, and must fail on breaking findings.
+      - name: Check again with fail-on-breaking
+        id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          package: MarkupSafe
+          old-version: 2.0.1
+          new-version: 2.1.0
+          path: tests/fixtures/demo
+
+      - name: Check that breaking findings failed the action
+        env:
+          OUTCOME: ${{ steps.gate.outcome }}
+        run: test "$OUTCOME" = failure

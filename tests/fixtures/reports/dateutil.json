@@ -1,0 +1,12 @@
+{
+  "package": "python-dateutil",
+  "old": "2.8.2",
+  "new": "2.9.0.post0",
+  "findings": [],
+  "summary": {
+    "breaking": 0,
+    "review": 0,
+    "status": "not imported"
+  },
+  "error": null
+}

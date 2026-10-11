@@ -25,7 +25,12 @@ $ upgrade-impact urllib3 1.26.15 2.0.0 ./my-repo
 - `src/upgrade_impact/scan.py`: find usages in the user's repo
 - `src/upgrade_impact/check.py`: compare versions and judge each usage
 - `src/upgrade_impact/cli.py`: argument parsing, output, exit codes (entry point `upgrade-impact`)
+- `action.yml`: the composite GitHub Action
+- `src/upgrade_impact/action.py`: the Action's analysis step, which never receives the token
+- `src/upgrade_impact/comment.py`: render JSON reports as the pull request comment
 - `tests/fixtures/demo/app.py`: acceptance fixture (below)
+- `tests/fixtures/reports/*.json`, `tests/fixtures/comments/*.md`: CLI reports and the comments
+  rendered from them
 
 ## Commands
 - Setup: `uv sync`
@@ -122,10 +127,13 @@ Renovate support goes in ROADMAP.md.
 
 ### The Action (Day 9)
 - Composite `action.yml` at the repo root. Run the CLI from the action's own checkout
-  (`uvx --from` with the `github.action_path` expression), so the action version always equals
-  the CLI version.
+  (`uv run --no-config --project` with the `github.action_path` expression, `--locked --no-dev`),
+  so the action version always equals the CLI version, dependencies come from `uv.lock`, and no
+  uv settings from the checked repository apply.
 - Get packages and versions from `dependabot/fetch-metadata` (its `updated-dependencies-json`
-  output). Only the pip and uv ecosystems; skip others.
+  output). Only the pip and uv ecosystems; skip others. fetch-metadata needs the token, so it
+  runs as its own workflow step and passes its output to the action; never run it inside the
+  action.
 - Also accept manual inputs `package`, `old-version`, `new-version` for testing. With no PR,
   write the result to the job summary instead of commenting.
 - Post ONE comment per PR and update it on later runs. Find it by a hidden HTML comment marker

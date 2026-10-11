@@ -1,0 +1,39 @@
+[
+  {
+    "package": "evil|pkg <b>bold</b>",
+    "old": "1.0",
+    "new": "2.0`",
+    "findings": [
+      {
+        "file": "src/[docs](https://evil.example)/a b#1.py",
+        "line": 3,
+        "severity": "review",
+        "message": "evil.f(...) relies on the default of `x`, which changed from `None` to `'@octocat' | [click](https://evil.example)`"
+      },
+      {
+        "file": "@octocat.py",
+        "line": 7,
+        "severity": "breaking",
+        "message": "evil.g(...) may break: <img src=x onerror=alert(1)> @octocat fixes #1 ` see https://evil.example\n<!-- upgrade-impact -->"
+      }
+    ],
+    "summary": {
+      "breaking": 1,
+      "review": 1,
+      "status": "ok"
+    },
+    "error": null
+  },
+  {
+    "package": "broken",
+    "old": "1.0",
+    "new": "2.0",
+    "findings": [],
+    "summary": {
+      "breaking": 0,
+      "review": 0,
+      "status": "error"
+    },
+    "error": "Could not download wheel for broken==1.0: ERROR: No matching distribution | see [docs](https://evil.example)\n@octocat <script>alert(1)</script> #1\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+]

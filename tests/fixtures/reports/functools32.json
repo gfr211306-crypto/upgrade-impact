@@ -1,0 +1,12 @@
+{
+  "package": "functools32",
+  "old": "3.2.3-2",
+  "new": "3.2.3-1",
+  "findings": [],
+  "summary": {
+    "breaking": 0,
+    "review": 0,
+    "status": "error"
+  },
+  "error": "No wheel is available for functools32==3.2.3-2; source distributions are disabled to avoid running build code"
+}

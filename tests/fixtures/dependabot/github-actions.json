@@ -1,0 +1,18 @@
+[
+  {
+    "dependencyName": "actions/checkout",
+    "dependencyType": "direct:production",
+    "updateType": "version-update:semver-major",
+    "directory": "/",
+    "packageEcosystem": "github_actions",
+    "targetBranch": "main",
+    "prevVersion": "4.2.2",
+    "newVersion": "5.0.0",
+    "compatScore": 0,
+    "maintainerChanges": false,
+    "dependencyGroup": "",
+    "alertState": "",
+    "ghsaId": "",
+    "cvss": 0
+  }
+]
