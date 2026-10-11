@@ -59,15 +59,19 @@ $ upgrade-impact MarkupSafe 2.0.1 2.1.0 tests/fixtures/demo --format json
     {"file": "app.py", "line": 1, "severity": "breaking", "message": "markupsafe.soft_unicode was removed"},
     {"file": "app.py", "line": 9, "severity": "breaking", "message": "markupsafe.soft_unicode was removed"}
   ],
-  "summary": {"breaking": 2, "review": 0, "status": "ok"},
+  "summary": {"breaking": 2, "review": 0, "status": "ok", "usages": 2, "files": 1},
   "error": null
 }
 ```
 
 Finding severity is `breaking` or `review`. Summary status is `ok` when analysis completed,
 `not imported` when the repository uses none of the distribution's imports, or `error` on a tool
-error. On an error, `error` contains the reason and `findings` is empty. Exit codes are the same
-for both formats.
+error. `summary.usages` counts distinct `file:line` locations containing imports or calls that
+use the analyzed import names, including import lines. Multiple usages on one line count once,
+even across several analyzed import names. `summary.files` counts the distinct files containing
+those locations. Both counts are integers when status is `ok`, zero when status is `not imported`,
+and `null` when status is `error`. On an error, `error` contains the reason and `findings` is empty.
+The text output is unchanged. Exit codes are the same for both formats.
 
 ### Exit codes
 
@@ -147,6 +151,18 @@ update and comments on the pull request: a table with one row per package, then 
 in which each finding links to its line in the pull request's head commit. Later runs update the
 same comment.
 
+Each analyzed package's result includes the number of usage locations and files, whether or not
+there are findings. An illustrative comment table looks like this:
+
+| Package | Upgrade | Result |
+|---|---|---|
+| `pandas` | `2.3.3` → `3.0.6` | ✅ no findings · 2 usages in 1 file |
+| `MarkupSafe` | `2.0.1` → `2.1.0` | ❌ 2 breaking · 2 usages in 1 file |
+| `unused-package` | `1.0.0` → `2.0.0` | not imported |
+
+Counts use singular forms for one location or file, such as `1 usage in 1 file`.
+The same format appears in the job summary; `not imported` rows keep their existing format.
+
 Add `.github/workflows/upgrade-impact.yml`:
 
 ```yaml
@@ -189,6 +205,12 @@ Outputs: `breaking`, the number of breaking findings, and `comment-file`, the re
 Without a pull request, such as in a `workflow_dispatch` run with the manual inputs, the result is
 written to the job summary instead of a comment. A package that cannot be analyzed shows
 `could not analyze:` and the reason, and the other packages are still checked.
+
+### Real-world example
+
+In [StudyForge #9](https://github.com/gfr211306-crypto/StudyForge/pull/9), Dependabot upgraded pandas
+from 2.3.3 to 3.0.6. The action automatically posted a comment reporting no findings. StudyForge
+is another project by the author of upgrade-impact.
 
 ### Security
 
