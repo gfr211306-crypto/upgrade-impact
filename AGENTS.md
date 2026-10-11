@@ -11,9 +11,10 @@ $ upgrade-impact urllib3 1.26.15 2.0.0 ./my-repo
 1 breaking · 0 to review
 ```
 
-## v0.2 scope (do not build more than this)
+## v0.3 scope (do not build more than this)
 - Python only, CLI and GitHub Action only.
-- The GitHub Action is now in scope. Still no LLM calls, no CVE scanning, no web UI.
+- Include usage counts in JSON reports, pull request comments, and job summaries.
+  CLI text output stays exactly the same. Still no LLM calls, no CVE scanning, no web UI.
   Renovate support goes in ROADMAP.md.
 - Input: distribution name, old version, new version, repo path. Optional `--import-name`.
 - Output: one line per finding (`file:line  message`), then one summary line; `--format json`
@@ -106,7 +107,7 @@ m = Markup("<b>hi</b>")
 - One small commit per change. Run `uv run pytest` before every commit. Never commit a change that makes a previously passing test fail. Acceptance tests for days not built yet are expected to fail; that is fine to commit.
 - Do not edit the acceptance tests to make them pass.
 - Do not add dependencies besides `griffe[pypi]` and `pytest` without asking.
-- If a task seems to need something outside v0.2 scope, stop and ask.
+- If a task seems to need something outside v0.3 scope, stop and ask.
 
 ## v0.2: GitHub Action (Week 2)
 Goal: when Dependabot opens a PR that bumps Python packages, comment on the PR with the
@@ -158,3 +159,30 @@ Renovate support goes in ROADMAP.md.
   `tests/fixtures/demo`), plus a "GitHub Action" section in the README.
 - Day 11: Marketplace metadata (name, description, branding) and release v0.2.0.
   A human publishes it to the Marketplace.
+
+## v0.3 (Week 3)
+Goal: show how much repository code was checked, so a result with no findings also
+shows that the dependency was actually used and analyzed.
+
+### Usage counts (Day 12)
+- `usages` is the number of distinct `(file, line)` locations using the import names
+  analyzed in the repository. Include import lines. Multiple usages on one line count
+  once, including usages of different analyzed import names on that line.
+- `files` is the number of distinct files containing those usages.
+- Add `usages` and `files` to the JSON `summary`. Both are integers when `status` is
+  `ok` or `not imported`; both are zero for `not imported` and null for `error`.
+- In pull request comments and job summaries, append counts to successful analysis
+  results: `✅ no findings · 2 usages in 1 file`. Append the same counts after the
+  existing result text when there are findings. Use correct singular and plural forms
+  (`1 usage`, `2 usages`, `1 file`, `2 files`). Keep `not imported` rows unchanged.
+- Keep all CLI text output exactly unchanged, including findings, summaries, and errors.
+- Add unit tests for counting, JSON fields, and comment rendering. Do not change the
+  acceptance tests.
+- Update the English README to document the new JSON fields and comment format. Add
+  a Real-world example linking to https://github.com/gfr211306-crypto/StudyForge/pull/9:
+  Dependabot upgraded pandas from 2.3.3 to 3.0.6, and the Action automatically commented
+  with no findings. State that StudyForge is another project by the same author.
+- Commit this specification separately before implementation. Use small commits and
+  run `uv run pytest` before each commit.
+- Do not change the version, create tags or releases, or add dependencies for Day 12.
+  Push the completed work to `day-12-usage-counts`, never to `master`.
